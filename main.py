@@ -23,13 +23,13 @@ logger = logging.getLogger("helloworld")
 
 IRAN_TZ = ZoneInfo("Asia/Tehran")
 
-# نام سرویس عمداً ساده و بی‌خطر انتخاب شده تا شبیه یک وب‌سرویس معمولی باشد
 app = FastAPI(title="helloworld", docs_url=None, redoc_url=None)
 
 # ── Persistence ───────────────────────────────────────────────────────────────
 DATA_DIR = Path(os.environ.get("DATA_DIR", "/data"))
 DATA_FILE = DATA_DIR / "hw_state.json"
 SECRET_FILE = DATA_DIR / "hw_secret.key"
+SNI_FILE = Path(__file__).parent / "sni.txt"
 SAVE_LOCK = asyncio.Lock()
 
 def _load_or_create_secret() -> str:
@@ -49,17 +49,43 @@ def _load_or_create_secret() -> str:
         logger.warning(f"Could not persist SECRET_KEY: {e}")
         return secrets.token_urlsafe(32)
 
+def _load_sni_list() -> list[str]:
+    try:
+        if SNI_FILE.exists():
+            lines = SNI_FILE.read_text(encoding="utf-8").splitlines()
+            return [l.strip() for l in lines if l.strip() and not l.strip().startswith("#")]
+    except Exception as e:
+        logger.warning(f"Could not load sni.txt: {e}")
+    return ["www.microsoft.com", "cdn.jsdelivr.net", "google.com"]
+
 CONFIG = {
     "port": int(os.environ.get("PORT", 8000)),
     "secret": _load_or_create_secret(),
     "host": os.environ.get("RAILWAY_PUBLIC_DOMAIN", "localhost"),
+    "fake_sni": os.environ.get("FAKE_SNI", "").strip(),
+    "cipher_suites": os.environ.get(
+        "CIPHER_SUITES",
+        "TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256:"
+        "TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256:"
+        "TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256:"
+        "TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256:"
+        "TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384:"
+        "TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384:"
+        "TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA:"
+        "TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA:"
+        "TLS_RSA_WITH_AES_128_GCM_SHA256:"
+        "TLS_RSA_WITH_AES_256_GCM_SHA384:"
+        "TLS_RSA_WITH_AES_128_CBC_SHA:"
+        "TLS_RSA_WITH_AES_256_CBC_SHA"
+    ).strip(),
+    "sni_list": _load_sni_list(),
 }
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
+    allow_credentials=False,
+    allow_methods=["GET", "POST", "OPTIONS"],
     allow_headers=["*"],
 )
 
@@ -108,7 +134,7 @@ LINKS_LOCK = asyncio.Lock()
 
 PROTOCOLS = ("vless-ws", "xhttp-packet-up", "xhttp-stream-up", "xhttp-stream-one")
 DEFAULT_PROTOCOL = "vless-ws"
-FINGERPRINTS = ("chrome", "firefox", "safari", "ios", "android", "edge", "360", "qq", "random", "randomized")
+FINGERPRINTS = ("chrome", "firefox", "safari", "ios", "android", "edge", "360", "qq", "random", "randomized", "unsafe")
 DEFAULT_FINGERPRINT = "chrome"
 DEFAULT_ALPN_BY_PROTOCOL = {
     "vless-ws": "http/1.1",
@@ -119,6 +145,7 @@ DEFAULT_ALPN_BY_PROTOCOL = {
 DEFAULT_PORT = 443
 MIN_PORT, MAX_PORT = 1, 65535
 DEFAULT_SPEED_LIMIT = 0
+SUBS: dict = {}
 
 def log_activity(kind: str, message: str, level: str = "info"):
     activity_logs.append({
@@ -138,8 +165,9 @@ async def startup():
     await load_state()
     await ensure_default_link()
     await log_startup_link()
-    log_activity("system", "سرور راه‌اندازی شد", "ok")
+    log_activity("system", "started", "ok")
     logger.info(f"helloworld started on port {CONFIG['port']}")
+    logger.info(f"sni.txt loaded: {len(CONFIG['sni_list'])} domains")
 
 @app.on_event("shutdown")
 async def shutdown():
@@ -164,6 +192,35 @@ def generate_uuid() -> str:
 def now_ir() -> datetime:
     return datetime.now(IRAN_TZ)
 
+def _build_params(uid, host, protocol, fp, alpn_val, sni_val, extra=None):
+    if protocol == "vless-ws":
+        params = {
+            "encryption": "none",
+            "security": "tls",
+            "type": "ws",
+            "host": host,
+            "path": f"/ws/{uid}",
+            "sni": sni_val,
+            "fp": fp,
+            "alpn": alpn_val,
+        }
+    else:
+        mode = protocol.replace("xhttp-", "")
+        params = {
+            "encryption": "none",
+            "security": "tls",
+            "type": "xhttp",
+            "mode": mode,
+            "host": host,
+            "path": f"/xhttp-siz10/{mode}/{uid}",
+            "sni": sni_val,
+            "fp": fp,
+            "alpn": alpn_val,
+        }
+    if extra:
+        params.update(extra)
+    return params
+
 def generate_vless_link(
     uuid: str,
     host: str,
@@ -172,6 +229,7 @@ def generate_vless_link(
     fingerprint: str | None = None,
     alpn: str | None = None,
     port: int | None = None,
+    fake_sni: str | None = None,
 ) -> str:
     fp = (fingerprint or DEFAULT_FINGERPRINT).strip() or DEFAULT_FINGERPRINT
     if fp not in FINGERPRINTS:
@@ -180,35 +238,23 @@ def generate_vless_link(
     port_val = port or DEFAULT_PORT
     if not (MIN_PORT <= port_val <= MAX_PORT):
         port_val = DEFAULT_PORT
-
-    if protocol == "vless-ws":
-        path = f"/ws/{uuid}"
-        params = {
-            "encryption": "none",
-            "security": "tls",
-            "type": "ws",
-            "host": host,
-            "path": path,
-            "sni": host,
-            "fp": fp,
-            "alpn": alpn_val,
-        }
-    else:
-        mode = protocol.replace("xhttp-", "")
-        path = f"/xhttp-siz10/{mode}/{uuid}"
-        params = {
-            "encryption": "none",
-            "security": "tls",
-            "type": "xhttp",
-            "mode": mode,
-            "host": host,
-            "path": path,
-            "sni": host,
-            "fp": fp,
-            "alpn": alpn_val,
-        }
+    sni_val = fake_sni or CONFIG.get("fake_sni") or host
+    params = _build_params(uuid, host, protocol, fp, alpn_val, sni_val)
     query = "&".join(f"{k}={quote(str(v))}" for k, v in params.items())
     return f"vless://{uuid}@{host}:{port_val}?{query}#{quote(remark)}"
+
+def generate_vless_link_patt(uuid: str, host: str, sni: str = "", remark: str = "hw-patt") -> str:
+    """PattNG link: fp=unsafe + finalMask + cipher suites."""
+    sni_val = sni or CONFIG.get("fake_sni") or host
+    params = _build_params(
+        uuid, host, "vless-ws", "unsafe", "http/1.1", sni_val,
+        extra={
+            "fm": "tlshello",
+            "cs": CONFIG.get("cipher_suites", ""),
+        },
+    )
+    query = "&".join(f"{k}={quote(str(v))}" for k, v in params.items())
+    return f"vless://{uuid}@{host}:443?{query}#{quote(remark)}"
 
 def vless_link_for_link(link: dict, uid: str, host: str) -> str:
     proto = link.get("protocol", DEFAULT_PROTOCOL)
@@ -225,25 +271,6 @@ def uptime() -> str:
     secs = int(time.time() - stats["start_time"])
     h, m, s = secs // 3600, (secs % 3600) // 60, secs % 60
     return f"{h:02d}:{m:02d}:{s:02d}"
-
-def parse_size_to_bytes(value: float, unit: str) -> int:
-    unit = unit.upper()
-    if unit == "GB": return int(value * 1024 ** 3)
-    if unit == "MB": return int(value * 1024 ** 2)
-    if unit == "KB": return int(value * 1024)
-    return int(value)
-
-def parse_speed_to_bytes(value: float, unit: str) -> int:
-    if value <= 0:
-        return 0
-    unit = (unit or "MBIT").upper()
-    if unit == "MBIT":
-        return int(value * 1024 * 1024 / 8)
-    if unit == "KB":
-        return int(value * 1024)
-    if unit == "MB":
-        return int(value * 1024 * 1024)
-    return int(value)
 
 def is_link_expired(link: dict) -> bool:
     exp = link.get("expires_at")
@@ -266,12 +293,6 @@ def is_link_allowed(link: dict | None) -> bool:
         return False
     return True
 
-def fmt_bytes(b: int) -> str:
-    if b < 1024: return f"{b} B"
-    if b < 1024**2: return f"{b/1024:.1f} KB"
-    if b < 1024**3: return f"{b/1024**2:.2f} MB"
-    return f"{b/1024**3:.2f} GB"
-
 def unique_ips_for_uuid(uuid: str) -> set:
     return {c.get("ip") for c in connections.values() if c.get("uuid") == uuid and c.get("ip")}
 
@@ -293,9 +314,9 @@ def client_ip(request: Request) -> str:
     real_ip = request.headers.get("x-real-ip")
     if real_ip:
         return real_ip.strip()
-    return request.client.host if request.client else "نامشخص"
+    return request.client.host if request.client else "unknown"
 
-# ── Default link (کاربر بی‌نهایت) ─────────────────────────────────────────────
+# ── Default link ──────────────────────────────────────────────────────────────
 _default_link_created = False
 
 async def ensure_default_link():
@@ -328,20 +349,44 @@ async def ensure_default_link():
         _default_link_created = True
 
 async def log_startup_link():
-    """لینک کاربر پیش‌فرض بی‌نهایت را در Deploy Logs چاپ می‌کند."""
+    """Print two links in Deploy Logs: standard (with FAKE_SNI) + PattNG."""
     host = os.environ.get("RAILWAY_PUBLIC_DOMAIN", "").strip()
     if not host:
         host = CONFIG["host"]
+
     async with LINKS_LOCK:
+        target_uid = None
+        target_link = None
         for uid, link in LINKS.items():
-            if link.get("active") and link.get("limit_bytes", 0) == 0 and not is_link_expired(link):
-                vless = vless_link_for_link(link, uid, host)
-                logger.info("=" * 70)
-                logger.info("🔗 link:")
-                logger.info(vless)
-                logger.info("=" * 70)
-                return
-        logger.warning("no default link found")
+            if is_link_allowed(link):
+                target_uid = uid
+                target_link = link
+                break
+
+    if not target_uid:
+        logger.warning("no active link found for logging")
+        return
+
+    # Standard link (uses FAKE_SNI if set)
+    vless_simple = vless_link_for_link(target_link, target_uid, host)
+
+    # PattNG link (fp=unsafe + fm + cs, also uses FAKE_SNI if set)
+    vless_patt = generate_vless_link_patt(
+        target_uid, host,
+        sni=CONFIG.get("fake_sni", ""),
+        remark="hw-patt",
+    )
+
+    logger.info("=" * 78)
+    logger.info("🔗 Standard link (v2rayNG / v2rayN):")
+    logger.info(vless_simple)
+    logger.info("-" * 78)
+    logger.info("🔗 PattNG link (fp=unsafe + finalMask + cipher suites):")
+    logger.info(vless_patt)
+    logger.info("-" * 78)
+    logger.info(f"🌐 FAKE_SNI: {CONFIG['fake_sni'] or '(not set — using host as sni)'}")
+    logger.info(f"📄 SNI list loaded: {len(CONFIG['sni_list'])} domains from sni.txt")
+    logger.info("=" * 78)
 
 # ── Basic endpoints ───────────────────────────────────────────────────────────
 @app.get("/")
@@ -365,25 +410,50 @@ async def subscription_single(uuid: str, request: Request):
     content = base64.b64encode(vless.encode()).decode()
     return Response(content=content, media_type="text/plain")
 
-# ══════════════════════════════════════════════════════════════════════════════
-# VLESS Relay — دست‌نخورده
-# ══════════════════════════════════════════════════════════════════════════════
-from relay_vless import (
-    RELAY_BUF,
-    parse_vless_header,
-    check_and_use,
-    relay_ws_to_tcp,
-    relay_tcp_to_ws,
-    websocket_tunnel,
-)
+# ── /get/config — for GitHub Pages (custom SNI) ───────────────────────────────
+@app.get("/get/config")
+async def get_config(request: Request, sni: str = ""):
+    sni = (sni or "").strip()
+    if not sni:
+        raise HTTPException(status_code=400, detail="sni is required")
+    if len(sni) > 253 or not all(c.isalnum() or c in ".-_" for c in sni):
+        raise HTTPException(status_code=400, detail="invalid sni")
 
+    host = get_host(request)
+    async with LINKS_LOCK:
+        target_uid = None
+        target_link = None
+        for uid, link in LINKS.items():
+            if is_link_allowed(link):
+                target_uid = uid
+                target_link = link
+                break
+
+    if not target_uid:
+        raise HTTPException(status_code=404, detail="no active config")
+
+    standard = generate_vless_link(
+        target_uid, host,
+        remark=f"hw-{sni}",
+        protocol=target_link.get("protocol", DEFAULT_PROTOCOL),
+        fingerprint=target_link.get("fingerprint", DEFAULT_FINGERPRINT),
+        alpn=target_link.get("alpn"),
+        port=target_link.get("port"),
+        fake_sni=sni,
+    )
+    patt = generate_vless_link_patt(target_uid, host, sni=sni, remark=f"hw-patt-{sni}")
+
+    return {
+        "standard": standard,
+        "patt": patt,
+        "sni": sni,
+        "uuid": target_uid,
+        "host": host,
+    }
+
+# ── Tunnel ────────────────────────────────────────────────────────────────────
+from relay_vless import websocket_tunnel
 app.add_api_websocket_route("/ws/{uuid}", websocket_tunnel)
-
-# ══════════════════════════════════════════════════════════════════════════════
-# XHTTP — دست‌نخورده
-# ══════════════════════════════════════════════════════════════════════════════
-from xhttp_siz10 import router as xhttp_router
-app.include_router(xhttp_router)
 
 if __name__ == "__main__":
     uvicorn.run("main:app", host="0.0.0.0", port=CONFIG["port"], log_level="info", workers=1)
