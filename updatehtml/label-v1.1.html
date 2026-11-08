@@ -1,0 +1,481 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>تابلوی انیمیشنی</title>
+<link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;700;900&display=swap" rel="stylesheet">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: #111;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    min-height: 100vh;
+    gap: 1.2rem;
+    font-family: 'Vazirmatn', Tahoma, sans-serif;
+    padding: 1.5rem 1rem 2rem;
+  }
+  h1 { color: #fff; font-size: 20px; }
+
+  /* Update banner */
+  #updateBanner {
+    display: none;
+    width: 100%; max-width: 540px;
+    background: linear-gradient(135deg, #1a3a1a, #0f2a0f);
+    border: 1px solid #2a7a2a;
+    border-radius: 12px;
+    padding: 12px 16px;
+    color: #7fff7f;
+    font-size: 13px;
+    gap: 10px;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+  #updateBanner.show { display: flex; }
+  #updateBanner strong { color: #afffaf; font-size: 14px; }
+  #updateBanner a {
+    color: #5fd45f; text-decoration: underline; cursor: pointer;
+    font-weight: 700;
+  }
+  #noupdate {
+    display: none;
+    width: 100%; max-width: 540px;
+    background: #1a1a1a;
+    border: 1px solid #333;
+    border-radius: 12px;
+    padding: 10px 16px;
+    color: #555;
+    font-size: 12px;
+    text-align: center;
+  }
+  #noupdate.show { display: block; }
+
+  .panel {
+    background: #1e1e1e;
+    border-radius: 16px;
+    padding: 1.25rem;
+    width: 100%;
+    max-width: 540px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .row label { color: #aaa; font-size: 13px; min-width: 70px; }
+  input[type=text] {
+    flex: 1; padding: 10px 14px; border-radius: 10px;
+    border: 1.5px solid #333; background: #2a2a2a; color: #fff;
+    font-size: 15px; font-family: 'Vazirmatn', Tahoma, sans-serif;
+    font-weight: 900; outline: none;
+  }
+  input[type=text]:focus { border-color: #e63232; }
+  input[type=color] { width: 44px; height: 36px; border: none; border-radius: 8px; cursor: pointer; padding: 0; }
+  .clabel { color: #888; font-size: 12px; }
+  .cg { display: flex; align-items: center; gap: 5px; }
+  button {
+    padding: 10px 16px; border-radius: 10px; border: none;
+    font-size: 14px; font-family: 'Vazirmatn', Tahoma, sans-serif;
+    font-weight: 900; cursor: pointer;
+  }
+  .btn-fire  { background: #e63232; color: #fff; }
+  .btn-fire:hover  { background: #c02828; }
+  .btn-gif   { background: #0f9b58; color: #fff; }
+  .btn-gif:hover   { background: #0a7a45; }
+  .btn-webm  { background: #1565c0; color: #fff; }
+  .btn-webm:hover  { background: #0d47a1; }
+  button:disabled { background: #444 !important; cursor: not-allowed; }
+  .divider { border: none; border-top: 1px solid #2e2e2e; }
+  #status { font-size: 13px; color: #0f9b58; min-height: 18px; text-align: center; }
+
+  /* Stage */
+  .stage {
+    width: 100%; max-width: 540px; height: 220px;
+    border-radius: 14px;
+    display: flex; align-items: center; justify-content: center;
+    perspective: 900px; position: relative; overflow: hidden;
+  }
+  .label-wrap { position: absolute; opacity: 0; display: flex; flex-direction: column; align-items: center; gap: 4px; }
+  .label-wrap.go { animation: popIn 0.65s cubic-bezier(0.22,1.5,0.45,1) forwards; }
+  @keyframes popIn {
+    0%   { opacity:0; transform:scale(0.08) translateZ(-700px); }
+    60%  { opacity:1; transform:scale(1.08) translateZ(0); }
+    80%  { transform:scale(0.95) translateZ(0); }
+    100% { opacity:1; transform:scale(1) translateZ(0); }
+  }
+  .label-box {
+    position: relative; border-radius: 999px;
+    padding: 18px 48px;
+    display: inline-flex; align-items: center; justify-content: center;
+  }
+  .label-box::before {
+    content:''; position:absolute; top:6px; left:12px; right:12px;
+    height:40%; background:linear-gradient(to bottom,rgba(255,255,255,0.22),transparent);
+    border-radius:999px; pointer-events:none;
+  }
+  .label-text {
+    font-family:'Vazirmatn',Tahoma,sans-serif; font-weight:900;
+    font-size:42px; white-space:nowrap; position:relative; z-index:1;
+  }
+  /* زیرنویس کوچک روی لیبل */
+  .label-sub {
+    font-family: 'Vazirmatn', Tahoma, sans-serif;
+    font-size: 10px;
+    font-weight: 400;
+    color: rgba(255,255,255,0.55);
+    letter-spacing: 0.3px;
+    white-space: nowrap;
+    text-align: center;
+    margin-top: 2px;
+  }
+
+  .rec {
+    display:none; position:absolute; top:10px; right:10px;
+    background:#e63232; color:#fff; font-size:11px;
+    padding:3px 10px; border-radius:20px; animation:blink 1s infinite;
+  }
+  @keyframes blink{0%,100%{opacity:1}50%{opacity:0.3}}
+
+  /* Footer */
+  .footer {
+    display: flex; flex-direction: column; align-items: center;
+    gap: 6px; padding-top: 0.5rem;
+  }
+  .footer-by { color: #555; font-size: 13px; font-weight: 400; }
+  .footer-links { display: flex; gap: 16px; align-items: center; }
+  .footer-links a {
+    display: flex; align-items: center; gap: 6px;
+    color: #888; text-decoration: none; font-size: 13px;
+    transition: color 0.2s;
+  }
+  .footer-links a:hover { color: #fff; }
+  .footer-links svg { width: 18px; height: 18px; flex-shrink: 0; }
+  .ver-badge {
+    color: #333; font-size: 11px; margin-top: 4px;
+  }
+</style>
+</head>
+<body>
+
+<h1>🔴 تابلوی انیمیشنی</h1>
+
+<!-- Update banners -->
+<div id="updateBanner">
+  <span>🆕 <strong id="updateVer"></strong> موجوده!</span>
+  <a id="updateLink" onclick="downloadUpdate()">⬇ دانلود آپدیت</a>
+</div>
+<div id="noupdate">✅ فعلاً آپدیتی موجود نیست — نسخه v1.0</div>
+
+<div class="panel">
+  <div class="row">
+    <label>متن</label>
+    <input type="text" id="txtInput" value="By TheAghaBanafshi" maxlength="25"/>
+  </div>
+  <hr class="divider">
+  <div class="row">
+    <label>رنگ‌ها</label>
+    <div class="cg"><span class="clabel">پس‌زمینه</span><input type="color" id="cBg"     value="#000000" oninput="updateColors()"></div>
+    <div class="cg"><span class="clabel">تابلو</span>   <input type="color" id="cBox"    value="#d42020" oninput="updateColors()"></div>
+    <div class="cg"><span class="clabel">حاشیه</span>  <input type="color" id="cBorder" value="#8b0000" oninput="updateColors()"></div>
+    <div class="cg"><span class="clabel">نوشته</span>  <input type="color" id="cText"   value="#ffffff" oninput="updateColors()"></div>
+  </div>
+  <hr class="divider">
+  <div class="row">
+    <button class="btn-fire" onclick="fire()">▶ نمایش</button>
+    <button class="btn-gif"  id="btnGif"  onclick="exportGif()">⬇ GIF</button>
+    <button class="btn-webm" id="btnWebm" onclick="exportWebM()">⬇ WebM</button>
+  </div>
+  <div id="status"></div>
+</div>
+
+<div class="stage" id="stage">
+  <span class="rec" id="rec">● REC</span>
+  <div class="label-wrap" id="labelWrap">
+    <div class="label-box" id="labelBox">
+      <span class="label-text" id="labelText">By TheAghaBanafshi</span>
+    </div>
+    <span class="label-sub">Telegram : @AghaBanafshi</span>
+  </div>
+</div>
+
+<div class="footer">
+  <span class="footer-by">By TheAghaBanafshi</span>
+  <div class="footer-links">
+    <a href="https://t.me/AghaBanafshi" target="_blank">
+      <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.894 8.221-1.97 9.28c-.145.658-.537.818-1.084.508l-3-2.21-1.447 1.394c-.16.16-.295.295-.605.295l.213-3.053 5.56-5.023c.242-.213-.054-.333-.373-.12L8.32 13.617l-2.96-.924c-.643-.204-.657-.643.136-.953l11.57-4.461c.537-.194 1.006.131.828.942z"/></svg>
+      AghaBanafshi
+    </a>
+    <a href="https://github.com/TheAghaBanafshi" target="_blank">
+      <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.374 0 0 5.373 0 12c0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23A11.509 11.509 0 0112 5.803c1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576C20.566 21.797 24 17.3 24 12c0-6.627-5.373-12-12-12z"/></svg>
+      TheAghaBanafshi
+    </a>
+  </div>
+  <span class="ver-badge" id="verBadge">v1.0</span>
+</div>
+
+<canvas id="offCanvas" width="540" height="220" style="display:none"></canvas>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gif.js/0.2.0/gif.js"></script>
+<script>
+// ---- نسخه فعلی ----
+const CURRENT_VERSION = 'v1.0';
+let newVersionUrl = null;
+
+// مقایسه ورژن: v1.2 > v1.1 > v1.0
+function isNewerVersion(current, remote) {
+  const parse = v => v.replace(/^v/i,'').split('.').map(Number);
+  const a = parse(current);
+  const b = parse(remote);
+  for (let i = 0; i < Math.max(a.length, b.length); i++) {
+    const x = a[i] || 0, y = b[i] || 0;
+    if (y > x) return true;
+    if (y < x) return false;
+  }
+  return false; // برابرن
+}
+
+// ---- بررسی آپدیت ----
+async function checkUpdate() {
+  try {
+    const updateUrl = 'https://raw.githubusercontent.com/AghaBanafshi-2/Reponew/refs/heads/main/update';
+    const r = await fetch(updateUrl);
+    const text = (await r.text()).trim();
+
+    if (!text || text === 'none') {
+      document.getElementById('noupdate').classList.add('show');
+      return;
+    }
+
+    // فرمت:
+    // new: v1.1
+    // link: https://...
+    const lines = text.split('\n');
+    let newVer = null, newLink = null;
+    for (const line of lines) {
+      if (line.startsWith('new:'))  newVer  = line.replace('new:','').trim();
+      if (line.startsWith('link:')) newLink = line.replace('link:','').trim();
+    }
+
+    if (newVer && newLink && isNewerVersion(CURRENT_VERSION, newVer)) {
+      // ورژن ریموت واقعاً جدیدتره
+      newVersionUrl = newLink;
+      document.getElementById('updateVer').textContent = newVer;
+      document.getElementById('updateBanner').classList.add('show');
+      document.getElementById('verBadge').textContent = CURRENT_VERSION + ' ← ' + newVer + ' موجوده';
+    } else {
+      // ورژن برابر یا قدیمی‌تر = آپدیت نداریم
+      document.getElementById('noupdate').classList.add('show');
+    }
+  } catch(e) {
+    // بی‌صدا
+  }
+}
+
+function downloadUpdate() {
+  if (newVersionUrl) window.open(newVersionUrl, '_blank');
+}
+
+// ---- رنگ‌ها ----
+function updateColors(){
+  const bg   = document.getElementById('cBg').value;
+  const box  = document.getElementById('cBox').value;
+  const bord = document.getElementById('cBorder').value;
+  const txt  = document.getElementById('cText').value;
+  document.getElementById('stage').style.background = bg;
+  const lb = document.getElementById('labelBox');
+  lb.style.background = box;
+  lb.style.boxShadow = `0 0 0 5px #000, 0 0 0 9px ${bord}, 0 8px 32px rgba(0,0,0,0.7)`;
+  const lt = document.getElementById('labelText');
+  lt.style.color = txt;
+  lt.style.textShadow = `-3px -3px 0 #000,3px -3px 0 #000,-3px 3px 0 #000,3px 3px 0 #000,-4px 0 0 #000,4px 0 0 #000,0 -4px 0 #000,0 4px 0 #000`;
+}
+
+function fire(){
+  const val = document.getElementById('txtInput').value.trim();
+  if(!val) return;
+  document.getElementById('labelText').textContent = val;
+  updateColors();
+  const wrap = document.getElementById('labelWrap');
+  wrap.classList.remove('go');
+  void wrap.offsetWidth;
+  wrap.classList.add('go');
+}
+
+// ---- Canvas helpers ----
+function getColors(){
+  return {
+    bg:   document.getElementById('cBg').value,
+    box:  document.getElementById('cBox').value,
+    bord: document.getElementById('cBorder').value,
+    txt:  document.getElementById('cText').value,
+  };
+}
+
+function roundRect(ctx,x,y,w,h,r){
+  const rr=Math.min(r,w/2,h/2);
+  ctx.beginPath();
+  ctx.moveTo(x+rr,y); ctx.lineTo(x+w-rr,y);
+  ctx.arcTo(x+w,y,x+w,y+rr,rr);
+  ctx.lineTo(x+w,y+h-rr);
+  ctx.arcTo(x+w,y+h,x+w-rr,y+h,rr);
+  ctx.lineTo(x+rr,y+h);
+  ctx.arcTo(x,y+h,x,y+h-rr,rr);
+  ctx.lineTo(x,y+rr);
+  ctx.arcTo(x,y,x+rr,y,rr);
+  ctx.closePath();
+}
+
+function easeOut(t){
+  if(t<0.6)  return {scale:0.08+(1.08-0.08)*(t/0.6),       opacity:t/0.6};
+  if(t<0.8)  return {scale:1.08+(0.95-1.08)*((t-0.6)/0.2), opacity:1};
+  return           {scale:0.95+(1.0-0.95)*((t-0.8)/0.2),  opacity:1};
+}
+
+function drawLabelFrame(ctx, val, t, W, H, colors, font){
+  const {bg,box,bord,txt} = colors;
+  const {scale,opacity} = easeOut(Math.max(0,Math.min(1,t)));
+  ctx.fillStyle=bg; ctx.fillRect(0,0,W,H);
+  ctx.save();
+  ctx.globalAlpha=Math.min(1,opacity);
+  ctx.translate(W/2, H/2 - 10);
+  ctx.scale(scale,scale);
+
+  const fontSize=42;
+  ctx.font=`900 ${fontSize}px ${font}`;
+  const tw=ctx.measureText(val).width;
+  const ph=48,pv=18,bw=tw+ph*2,bh=fontSize+pv*2;
+  const bx=-bw/2,by=-bh/2,r=bh/2;
+
+  // dark outer
+  ctx.fillStyle='#000'; roundRect(ctx,bx-9,by-9,bw+18,bh+18,r+9); ctx.fill();
+  // border ring
+  ctx.fillStyle=bord;   roundRect(ctx,bx-5,by-5,bw+10,bh+10,r+5); ctx.fill();
+  // box
+  ctx.fillStyle=box;    roundRect(ctx,bx,by,bw,bh,r); ctx.fill();
+  // shine
+  ctx.save();
+  roundRect(ctx,bx+8,by+5,bw-16,bh*0.45,r*0.9); ctx.clip();
+  const shine=ctx.createLinearGradient(0,by,0,by+bh*0.45);
+  shine.addColorStop(0,'rgba(255,255,255,0.22)');
+  shine.addColorStop(1,'rgba(255,255,255,0)');
+  ctx.fillStyle=shine; ctx.fillRect(bx,by,bw,bh);
+  ctx.restore();
+  // inner border
+  ctx.strokeStyle='rgba(255,255,255,0.12)'; ctx.lineWidth=2;
+  roundRect(ctx,bx+4,by+4,bw-8,bh-8,r-4); ctx.stroke();
+  // text
+  ctx.font=`900 ${fontSize}px ${font}`;
+  ctx.textAlign='center'; ctx.textBaseline='middle';
+  ctx.lineJoin='round'; ctx.lineWidth=7; ctx.strokeStyle='#000';
+  ctx.strokeText(val,0,0);
+  ctx.fillStyle=txt; ctx.fillText(val,0,0);
+
+  // زیرنویس کوچک
+  const subY = bh/2 + 14;
+  ctx.font=`400 10px ${font}`;
+  ctx.lineWidth=3;
+  ctx.strokeStyle='rgba(0,0,0,0.6)';
+  ctx.strokeText('Telegram : @AghaBanafshi', 0, subY);
+  ctx.fillStyle='rgba(255,255,255,0.55)';
+  ctx.fillText('Telegram : @AghaBanafshi', 0, subY);
+
+  ctx.restore();
+}
+
+async function waitForFont(){
+  if(document.fonts&&document.fonts.load){
+    await document.fonts.load('900 42px Vazirmatn');
+    await document.fonts.load('400 10px Vazirmatn');
+  }
+  return new Promise(r=>setTimeout(r,150));
+}
+
+// ---- GIF ----
+async function exportGif(){
+  const val=document.getElementById('txtInput').value.trim(); if(!val) return;
+  await waitForFont();
+  const colors=getColors();
+  const btn=document.getElementById('btnGif');
+  btn.disabled=true; btn.textContent='⏳ ...';
+  document.getElementById('rec').style.display='block';
+  document.getElementById('status').textContent='در حال ساخت GIF...';
+
+  const W=400,H=170,fps=15,dur=650;
+  const total=Math.ceil(dur/1000*fps);
+  const off=document.getElementById('offCanvas');
+  off.width=W; off.height=H;
+  const ctx=off.getContext('2d');
+  const font='Vazirmatn,Tahoma';
+
+  const gif=new GIF({workers:4,quality:12,width:W,height:H,
+    workerScript:'https://cdnjs.cloudflare.com/ajax/libs/gif.js/0.2.0/gif.worker.js'});
+
+  for(let i=0;i<total;i++){
+    drawLabelFrame(ctx,val,i/(total-1),W,H,colors,font);
+    gif.addFrame(off,{copy:true,delay:Math.round(1000/fps)});
+  }
+  drawLabelFrame(ctx,val,1,W,H,colors,font);
+  for(let i=0;i<8;i++) gif.addFrame(off,{copy:true,delay:120});
+
+  gif.on('progress',p=>{
+    document.getElementById('status').textContent='رندر: '+Math.round(p*100)+'%';
+  });
+  gif.on('finished',blob=>{
+    const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='label.gif'; a.click();
+    btn.disabled=false; btn.textContent='⬇ GIF';
+    document.getElementById('rec').style.display='none';
+    document.getElementById('status').textContent='✅ GIF آماده شد!';
+  });
+  gif.render();
+}
+
+// ---- WebM ----
+async function exportWebM(){
+  const val=document.getElementById('txtInput').value.trim(); if(!val) return;
+  await waitForFont();
+  const colors=getColors();
+  const btn=document.getElementById('btnWebm');
+  btn.disabled=true; btn.textContent='⏳ ...';
+  document.getElementById('rec').style.display='block';
+  document.getElementById('status').textContent='در حال ضبط ویدیو...';
+
+  const W=540,H=220;
+  const off=document.getElementById('offCanvas');
+  off.width=W; off.height=H;
+  const ctx=off.getContext('2d');
+  const font='Vazirmatn,Tahoma';
+
+  const stream=off.captureStream(60);
+  const recorder=new MediaRecorder(stream,{mimeType:'video/webm;codecs=vp9'});
+  const chunks=[];
+  recorder.ondataavailable=e=>{if(e.data.size>0)chunks.push(e.data);};
+  recorder.onstop=()=>{
+    const blob=new Blob(chunks,{type:'video/webm'});
+    const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='label.webm'; a.click();
+    btn.disabled=false; btn.textContent='⬇ WebM';
+    document.getElementById('rec').style.display='none';
+    document.getElementById('status').textContent='✅ ویدیو آماده شد!';
+  };
+  const animDur=700,holdDur=700,totalDur=animDur+holdDur;
+  recorder.start();
+  const start=performance.now();
+  function draw(){
+    const elapsed=performance.now()-start;
+    drawLabelFrame(ctx,val,Math.min(elapsed/animDur,1),W,H,colors,font);
+    if(elapsed<totalDur) requestAnimationFrame(draw);
+    else recorder.stop();
+  }
+  draw();
+}
+
+// ---- Init ----
+window.onload=()=>{
+  updateColors();
+  setTimeout(fire,400);
+  checkUpdate();
+};
+document.getElementById('txtInput').addEventListener('keydown',e=>{ if(e.key==='Enter') fire(); });
+</script>
+</body>
+</html>
